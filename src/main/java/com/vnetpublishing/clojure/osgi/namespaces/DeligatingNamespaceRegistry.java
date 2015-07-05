@@ -311,7 +311,10 @@ public class DeligatingNamespaceRegistry extends ConcurrentHashMap<Symbol, Names
 		bundleContext.addBundleListener(this);
 		List<Bundle> bundles = Arrays.asList(bundleContext.getBundles());
 		for(Bundle bundle : bundles) {
-			init(bundle);
+			int bstate = bundle.getState();
+			if (Bundle.RESOLVED == bstate) { 
+				init(bundle);
+			}
 		}
 	}
 	
@@ -391,11 +394,14 @@ public class DeligatingNamespaceRegistry extends ConcurrentHashMap<Symbol, Names
 		logger.fine(String.format("bundleChanged: %s BundleEvent.type is %s",bundle.getSymbolicName(), NamespaceUtil.bundleEventTypeName(event_type)));
 		
 		switch(event_type) {
-			case BundleEvent.STARTING:
+
+			case BundleEvent.RESOLVED:
 				init(bundle);
 				break;
+			case BundleEvent.STARTING:
+				logger.warning("***** CAUGHT STARTING EVENT: OSGI container may not be compatible with clj-osgi-namepsaces");
+				break;
 			case BundleEvent.INSTALLED:
-			case BundleEvent.RESOLVED:
 			case BundleEvent.STARTED:
 			case BundleEvent.STOPPING:
 			case BundleEvent.UNINSTALLED:
