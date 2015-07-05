@@ -8,6 +8,7 @@ import java.util.Map;
 
 import org.osgi.framework.Bundle;
 import org.osgi.framework.BundleEvent;
+import org.osgi.framework.BundleException;
 import org.osgi.framework.Version;
 
 public class NamespaceUtil {
@@ -159,6 +160,8 @@ public class NamespaceUtil {
 				return "RESOLVED";
 			case BundleEvent.STARTED:
 				return "STARTED";
+			case BundleEvent.STOPPED:
+				return "STOPPED";
 			case BundleEvent.STOPPING:
 				return "STOPPING";
 			case BundleEvent.UNINSTALLED:
@@ -170,4 +173,20 @@ public class NamespaceUtil {
 		}
 		return String.format("Unknown BundleEvent Type (%d)",event_type);
 	}
+	
+	public static void startBundle(Bundle bundle) throws BundleException 
+	{
+		bundle.start();
+	}
+	
+	public static void stopBundle(Bundle bundle) throws BundleException 
+	{
+		DeligatingNamespaceRegistry.inst.callStop(bundle);
+		if (Bundle.STOPPING != bundle.getState()) {
+			bundle.stop();
+		}
+	}
+	
+	
+	
 }

@@ -1,4 +1,15 @@
-(ns clojure.osgi.namespaces)
+(ns clojure.osgi.namespaces
+  (:import (com.vnetpublishing.clojure.osgi.namespaces 
+             DeligatingNamespaceRegistry
+             NamespaceUtil)))
+
+(defn start-bundle
+  [bnd]
+    (NamespaceUtil/startBundle bnd))
+
+(defn stop-bundle
+  [bnd]
+    (NamespaceUtil/stopBundle bnd))
 
 (defn osgi-active
   []

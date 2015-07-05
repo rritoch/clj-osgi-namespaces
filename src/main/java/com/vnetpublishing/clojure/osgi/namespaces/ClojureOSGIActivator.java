@@ -30,8 +30,8 @@ public class ClojureOSGIActivator implements BundleActivator {
 		
 		List<String> exports = new ArrayList<String>();
 		exports.add("clojure.core");
+		exports.add("clojure.osgi.namespaces");
 		DeligatingNamespaceRegistry.startFramework(context, exports);
-		
 		
 		Thread.currentThread().setContextClassLoader(ccl);
 		logger.info("ClojureOSGIActivator: Started!");
@@ -40,8 +40,18 @@ public class ClojureOSGIActivator implements BundleActivator {
 	@Override
 	public void stop(BundleContext context) throws Exception 
 	{
-		// TODO Auto-generated method stub
 		
+		ClassLoader ccl = Thread.currentThread().getContextClassLoader();
+		ClassLoader wcl = context.getBundle().adapt(BundleWiring.class).getClassLoader();
+		
+		logger.info("Stopping ClojureOSGIActivator");
+		
+		Thread.currentThread().setContextClassLoader(wcl);
+		DeligatingNamespaceRegistry.stopFramework(context);
+		
+		Thread.currentThread().setContextClassLoader(ccl);
+		
+		logger.info("ClojureOSGIActivator: Stopped!");
 	}
 
 }
