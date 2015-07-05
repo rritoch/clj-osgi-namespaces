@@ -6,6 +6,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.osgi.framework.Bundle;
+import org.osgi.framework.BundleEvent;
 import org.osgi.framework.Version;
 
 public class NamespaceUtil {
@@ -125,5 +127,47 @@ public class NamespaceUtil {
 			}
 		}
 		return maybe;
+	}
+
+	public static String bundleStateName(int state) 
+	{
+		switch(state) {
+			case Bundle.INSTALLED:
+				return "INSTALLED";
+			case Bundle.ACTIVE:
+				return "ACTIVE";
+			case Bundle.UNINSTALLED:
+				return "UNINSTALLED";
+			case Bundle.RESOLVED:
+				return "RESOLVED";
+			case Bundle.STARTING:
+				return "STARTING";
+			case Bundle.STOPPING:
+				return "STOPPING";
+		}
+		return String.format("Unknown state (%d)",state);
+	}
+	
+	public static String bundleEventTypeName(int event_type)
+	{
+		switch(event_type) {
+			case BundleEvent.STARTING:
+				return "STARTING";
+			case BundleEvent.INSTALLED:
+				return "INSTALLED";
+			case BundleEvent.RESOLVED:
+				return "RESOLVED";
+			case BundleEvent.STARTED:
+				return "STARTED";
+			case BundleEvent.STOPPING:
+				return "STOPPING";
+			case BundleEvent.UNINSTALLED:
+				return "UNINSTALLED";
+			case BundleEvent.UNRESOLVED:
+				return "UNRESOLVED";
+			case BundleEvent.UPDATED:
+				return "UPDATED";
+		}
+		return String.format("Unknown BundleEvent Type (%d)",event_type);
 	}
 }

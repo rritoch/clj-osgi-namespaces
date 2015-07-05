@@ -197,29 +197,33 @@ public class DeligatingNamespaceRegistry extends ConcurrentHashMap<Symbol, Names
 		
 		// Populate export list
 		
-		for (String export : exports) {
-			String versionStr = NamespaceUtil.parseDefinedAttributes(export).get("version");
-			if (versionStr == null || versionStr.length() < 1) {
-				myExports.add(new OSGIDependency(NamespaceUtil.parseDefinedSymbol(export),null));
-			} else {
-				myExports.add(new OSGIDependency(NamespaceUtil.parseDefinedSymbol(export),new Version(versionStr)));
+		if (exports != null) {
+			for (String export : exports) {
+				String versionStr = NamespaceUtil.parseDefinedAttributes(export).get("version");
+				if (versionStr == null || versionStr.length() < 1) {
+					myExports.add(new OSGIDependency(NamespaceUtil.parseDefinedSymbol(export),null));
+				} else {
+					myExports.add(new OSGIDependency(NamespaceUtil.parseDefinedSymbol(export),new Version(versionStr)));
+				}
 			}
 		}
 		
 		// Grab all imports, exception if import is not an export
 		
-		for (String nsimport : imports) {
-			OSGIDependency i = findImport(nsimport);
+		if (imports != null) {
+			for (String nsimport : imports) {
+				OSGIDependency i = findImport(nsimport);
 			
-			if (i == null) {
-				i = NamespaceUtil.findImport(nsimport,myExports);
+				if (i == null) {
+					i = NamespaceUtil.findImport(nsimport,myExports);
+				}
+			
+				if (i == null) {
+					throw new RuntimeException("Missing import");
+				}
+			
+				myImports.add(i);
 			}
-			
-			if (i == null) {
-				throw new RuntimeException("Missing import");
-			}
-			
-			myImports.add(i);
 		}
 		
 		// Generate all exports, they should exist eventually
@@ -267,7 +271,8 @@ public class DeligatingNamespaceRegistry extends ConcurrentHashMap<Symbol, Names
 	
 	public static boolean startFramework(BundleContext bundleContext, List<String> exports) 
 	{
-		if (active) {
+		if (isActive()) {
+			logger.warning("Refusing to start Clojure OSGI framework, it is already active");
 			return false;
 		}
 		
@@ -312,16 +317,26 @@ public class DeligatingNamespaceRegistry extends ConcurrentHashMap<Symbol, Names
 	
 	public boolean isClojureBundle(Bundle bundle) 
 	{
+		logger.fine(String.format("isClojureBundle(%s)",bundle.getSymbolicName()));
 		Dictionary<String,String> headers = bundle.getHeaders();
-		if (null != headers.get("Clojure-Imports")) {
+		
+		String clojure_imports = headers.get("Clojure-Imports"); 
+		logger.fine(String.format("Clojure-Imports: %s",String.valueOf(clojure_imports)));
+		String clojure_exports = headers.get("Clojure-Exports");
+		logger.fine(String.format("Clojure-Exports: %s",String.valueOf(clojure_exports)));		
+		String clojure_enable = headers.get("Clojure-Enable");
+		logger.fine(String.format("Clojure-Enable: %s",String.valueOf(clojure_enable)));
+		
+		if (null != clojure_imports) {
 			return true;
 		}
-		if (null != headers.get("Clojure-Exports")) {
+
+		if (null != clojure_exports) {
 			return true;
 		}
-		String enable = headers.get("Clojure-Enable");
-		if (null != enable) {
-			if ("true".equals(enable.toLowerCase())) {
+
+		if (null != clojure_enable) {
+			if ("true".equals(clojure_enable.toLowerCase())) {
 				return true;
 			}
 		}
@@ -331,8 +346,9 @@ public class DeligatingNamespaceRegistry extends ConcurrentHashMap<Symbol, Names
 	protected void init(Bundle bundle) 
 	{
 		if (registrations == null) return; // this shouldn't really happen
-		
 		int state = bundle.getState();
+		
+		logger.info(String.format("Initializing bundle %s has state %s",bundle.getSymbolicName(),NamespaceUtil.bundleStateName(state)));
 		if (state == Bundle.STARTING || state == Bundle.INSTALLED || state == Bundle.RESOLVED) {
 			
 			if (isClojureBundle(bundle)) {
@@ -368,10 +384,15 @@ public class DeligatingNamespaceRegistry extends ConcurrentHashMap<Symbol, Names
 	}
 	
 	@Override
-	public void bundleChanged(BundleEvent event) {
-		switch(event.getType()) {
+	public void bundleChanged(BundleEvent event) 
+	{
+		int event_type = event.getType();
+		Bundle bundle = event.getBundle();
+		logger.fine(String.format("bundleChanged: %s BundleEvent.type is %s",bundle.getSymbolicName(), NamespaceUtil.bundleEventTypeName(event_type)));
+		
+		switch(event_type) {
 			case BundleEvent.STARTING:
-				init(event.getBundle());
+				init(bundle);
 				break;
 			case BundleEvent.INSTALLED:
 			case BundleEvent.RESOLVED:
@@ -384,10 +405,9 @@ public class DeligatingNamespaceRegistry extends ConcurrentHashMap<Symbol, Names
 			default:
 				break;
 		}
-		
 	}
 	
-	public boolean isActive() 
+	public static boolean isActive() 
 	{
 		return active;
 	}
