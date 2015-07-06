@@ -32,7 +32,7 @@ The *Clojure-Enable* header value can only contain a value of true or false
 
 The *Clojure-Activator* header contains a clojure namespace which MUST define start and stop functions which accept a single parameter which will be an instance of the BundleContext.
 
-See: [clj-osgi-namespaces-hello-world](https://github.com/rritoch/clj-osgi-namespaces-hello-world)
+See: [clj-osgi-namespaces-hello-world](https://github.com/rritoch/clj-osgi-namespaces-hello-world) and [clj-osgi-namespaces-hello-world-user](https://github.com/rritoch/clj-osgi-namespaces-hello-world-user)
 
 ## License
 
