@@ -279,6 +279,28 @@ public class DeligatingNamespaceRegistry extends ConcurrentHashMap<Symbol, Names
 		providers.put(cl,myExports);
 		
 		registrations.put(cl,reg);
+		
+		// Pre-load export namespace, note namespaces aren't usually thread safe
+		if (myExports != null) {
+			final List<OSGIDependency> preloadExports = myExports;
+			
+			ClassLoader ccl = Thread.currentThread().getContextClassLoader();
+			final ClassLoader bcl = cl == ClassLoader.getSystemClassLoader()  ? ccl : cl;
+			Thread.currentThread().setContextClassLoader(bcl);
+			try {
+				withVoidNamespaceClassLoader(bcl,new Runnable() {
+					@Override
+					public void run() {
+						for (OSGIDependency export : preloadExports) {
+							IFn require = Clojure.var("clojure.core","require");
+							require.invoke(export.getName());
+						}
+					}
+				});
+			} finally {
+				Thread.currentThread().setContextClassLoader(ccl);
+			}
+		}
 	}
 	
 	protected void unregister(ClassLoader cl) 
