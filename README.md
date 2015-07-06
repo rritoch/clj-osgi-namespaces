@@ -15,8 +15,6 @@ Place the generated *-standalone.jar in your OSGI autoload (bundles/) folder
 
 ## Usage
 
-This is for testing purposes only, use at your own risk.
-
 The following non-standard OSGI Manfiest headers are supported
 
 * Clojure-Imports
