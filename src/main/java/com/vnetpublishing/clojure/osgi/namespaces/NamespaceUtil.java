@@ -176,17 +176,14 @@ public class NamespaceUtil {
 	
 	public static void startBundle(Bundle bundle) throws BundleException 
 	{
+		// Bundle listener will handle the callStart on STARTED
 		bundle.start();
 	}
 	
 	public static void stopBundle(Bundle bundle) throws BundleException 
 	{
-		DeligatingNamespaceRegistry.inst.callStop(bundle);
-		if (Bundle.STOPPING != bundle.getState()) {
-			bundle.stop();
-		}
+		// Bundle listener will handle the callStart on STOPPING
+		bundle.stop();
 	}
-	
-	
 	
 }

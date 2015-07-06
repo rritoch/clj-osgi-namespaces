@@ -36,35 +36,37 @@ public class DeligatingNamespaceRegistry extends ConcurrentHashMap<Symbol, Names
 	 * 
 	 */
 	private static final long serialVersionUID = -5269309431626927020L;
+	private static final Logger logger = Logger.getLogger(DeligatingNamespaceRegistry.class.getName());
+	 
 
 	protected static boolean active = false;
 	protected static Object origNamespaces = null;
-	
-	private static final Logger logger = Logger.getLogger(DeligatingNamespaceRegistry.class.getName());
-	
-	protected static DeligatingNamespaceRegistry inst = null;
-	
+	protected static DeligatingNamespaceRegistry INSTANCE = null;
+	protected static final ThreadLocal<ClassLoader> namespaceClassLoader = new ThreadLocal<ClassLoader>();
+
+	private ThreadLocal<ConcurrentHashMap<Symbol, Namespace>> registryOverride = new ThreadLocal<ConcurrentHashMap<Symbol, Namespace>>();
 	
 	protected ConcurrentHashMap<ClassLoader,ConcurrentHashMap<Symbol, Namespace>> registrations = new ConcurrentHashMap<ClassLoader,ConcurrentHashMap<Symbol, Namespace>>();
-	
 	protected Map<OSGIDependency,Namespace>  provided = new HashMap<OSGIDependency,Namespace>();
-	
 	protected Map<ClassLoader,List<OSGIDependency>> providers = new HashMap<ClassLoader,List<OSGIDependency>>();
 	
 	
-	private ThreadLocal<ConcurrentHashMap<Symbol, Namespace>> currentRegistry = new ThreadLocal<ConcurrentHashMap<Symbol, Namespace>>();
 	
 	protected  ConcurrentHashMap<Symbol, Namespace> getActiveNamespaces() 
 	{
 		
-		if (currentRegistry.get() != null) {
-			return currentRegistry.get();
+		if (registryOverride.get() != null) {
+			return registryOverride.get();
 		}
 		
 		ConcurrentHashMap<Symbol, Namespace> ret = null; 
 		ClassLoader scl = ClassLoader.getSystemClassLoader();
 		//ClassLoader cl = Thread.currentThread().getContextClassLoader();
-		ClassLoader cl = RT.baseLoader();
+		ClassLoader cl = namespaceClassLoader.get(); 
+		
+		if (cl == null) {
+			cl = RT.baseLoader();
+		}
 		while (ret == null && cl != null && cl != scl) {
 			ret = registrations.get(cl);
 			cl = cl.getParent();
@@ -239,12 +241,12 @@ public class DeligatingNamespaceRegistry extends ConcurrentHashMap<Symbol, Names
 		
 		// Generate all exports, they should exist eventually
 		
-		currentRegistry.set(reg); // Temporarily activate runtime
+		registryOverride.set(reg); // Temporarily activate runtime
 		for (OSGIDependency export : myExports) {
 			Namespace ns = Namespace.findOrCreate(export.getName());
 			reg.put(ns.getName(),ns);
 		}
-		currentRegistry.set(null);
+		registryOverride.set(null);
 		
 		// Process imports
 		
@@ -252,6 +254,10 @@ public class DeligatingNamespaceRegistry extends ConcurrentHashMap<Symbol, Names
 			Namespace ns = reg.get(myImport.getName());
 			Namespace nsin = myImport.getNamespace();
 			if (ns == null) {
+				if (nsin == null) {
+					nsin = provided.get(myImport);
+					myImport.setNamespace(nsin);
+				}
 				reg.put(myImport.getName(), nsin);
 			} else {
 				// Pass mappings
@@ -330,7 +336,7 @@ public class DeligatingNamespaceRegistry extends ConcurrentHashMap<Symbol, Names
 		}
 		
 		r.start(bundleContext);
-		inst = r;
+		INSTANCE = r;
 		return true;
 	}
 
@@ -366,7 +372,7 @@ public class DeligatingNamespaceRegistry extends ConcurrentHashMap<Symbol, Names
 
 		origNamespaces = null;
 		active = false;
-		inst = null;
+		INSTANCE = null;
 		return true;
 	}
 	
@@ -394,8 +400,8 @@ public class DeligatingNamespaceRegistry extends ConcurrentHashMap<Symbol, Names
 		String clojure_enable = headers.get("Clojure-Enable");
 		logger.fine(String.format("Clojure-Enable: %s",String.valueOf(clojure_enable)));
 		
-		String clojure_activator_namespace = headers.get("Clojure-Activator-Namespace");
-		logger.fine(String.format("Clojure-Activator-Namespace: %s",String.valueOf(clojure_activator_namespace)));
+		String clojure_activator_namespace = headers.get("Clojure-Activator");
+		logger.fine(String.format("Clojure-Activator: %s",String.valueOf(clojure_activator_namespace)));
 		
 		if (null != clojure_imports) {
 			return true;
@@ -424,7 +430,7 @@ public class DeligatingNamespaceRegistry extends ConcurrentHashMap<Symbol, Names
 		int state = bundle.getState();
 		
 		logger.info(String.format("Initializing bundle %s has state %s",bundle.getSymbolicName(),NamespaceUtil.bundleStateName(state)));
-		if (state == Bundle.STARTING || state == Bundle.INSTALLED || state == Bundle.RESOLVED) {
+		if (state == Bundle.STARTING || state == Bundle.INSTALLED || state == Bundle.RESOLVED || state == Bundle.ACTIVE) {
 			
 			if (isClojureBundle(bundle)) {
 			
@@ -458,6 +464,16 @@ public class DeligatingNamespaceRegistry extends ConcurrentHashMap<Symbol, Names
 		}
 	}
 	
+	
+	protected static ClassLoader getBundleClassLoader(Bundle bundle) 
+	{
+		ClassLoader cl = null;
+		if (bundle != null) {
+			cl = bundle.adapt(BundleWiring.class).getClassLoader();
+		}
+		return cl;
+	}
+	
 	protected void uninit(Bundle bundle) 
 	{
 		if (registrations == null) return; // this shouldn't really happen
@@ -468,7 +484,7 @@ public class DeligatingNamespaceRegistry extends ConcurrentHashMap<Symbol, Names
 			
 			if (isClojureBundle(bundle)) {
 			
-				ClassLoader cl = bundle.adapt(BundleWiring.class).getClassLoader();
+				ClassLoader cl = getBundleClassLoader(bundle);
 				if (registrations.get(cl) == null) {
 					logger.warning(String.format("Classloader for %s isn't registered",bundle.getSymbolicName()));
 					return; // Dejavu!
@@ -484,14 +500,39 @@ public class DeligatingNamespaceRegistry extends ConcurrentHashMap<Symbol, Names
 		}
 	}
 	
+	protected void withVoidNamespaceClassLoader(ClassLoader cl, Runnable proc) 
+	{
+		ClassLoader ncl = namespaceClassLoader.get();
+		namespaceClassLoader.set(cl);
+		try {
+			proc.run();
+		} finally {
+			namespaceClassLoader.set(ncl);
+		}
+	}
+	
 	protected void callStart(Bundle bundle) 
 	{
 		if (isClojureBundle(bundle)) {
 			Dictionary<String,String> headers = bundle.getHeaders();
-			String clojure_activator_namespace = headers.get("Clojure-Activator-Namespace");
+			final String clojure_activator_namespace = headers.get("Clojure-Activator");
 			if (clojure_activator_namespace != null) {
-				IFn func = Clojure.var(clojure_activator_namespace, "start");
-				func.invoke(bundle.getBundleContext());
+				
+				ClassLoader ccl = Thread.currentThread().getContextClassLoader();
+				ClassLoader bcl = getBundleClassLoader(bundle);
+				Thread.currentThread().setContextClassLoader(bcl);
+				try {
+					final Bundle bnd = bundle;
+					withVoidNamespaceClassLoader(bcl,new Runnable() {
+						@Override
+						public void run() {
+							IFn func = Clojure.var(clojure_activator_namespace, "start");
+							func.invoke(bnd.getBundleContext());
+						}
+					});
+				} finally {
+					Thread.currentThread().setContextClassLoader(ccl);
+				}
 			}
 		}
 	}
@@ -500,14 +541,27 @@ public class DeligatingNamespaceRegistry extends ConcurrentHashMap<Symbol, Names
 	{
 		if (isClojureBundle(bundle)) {
 			Dictionary<String,String> headers = bundle.getHeaders();
-			String clojure_activator_namespace = headers.get("Clojure-Activator-Namespace");
+			final String clojure_activator_namespace = headers.get("Clojure-Activator");
 			if (clojure_activator_namespace != null) {
-				IFn func = Clojure.var(clojure_activator_namespace, "stop");
-				func.invoke(bundle.getBundleContext());
+				
+				ClassLoader ccl = Thread.currentThread().getContextClassLoader();
+				ClassLoader bcl = getBundleClassLoader(bundle);
+				Thread.currentThread().setContextClassLoader(bcl);
+				try {
+					final Bundle bnd = bundle;
+					withVoidNamespaceClassLoader(bcl,new Runnable() {
+						@Override
+						public void run() {
+							IFn func = Clojure.var(clojure_activator_namespace, "stop");
+							func.invoke(bnd.getBundleContext());
+						}
+					});
+				} finally {
+					Thread.currentThread().setContextClassLoader(ccl);
+				}
 			}
 		}
 	}
-	
 	
 	@Override
 	public void bundleChanged(BundleEvent event) 
@@ -537,7 +591,6 @@ public class DeligatingNamespaceRegistry extends ConcurrentHashMap<Symbol, Names
 				callStart(bundle);
 				break;
 			case BundleEvent.STOPPED:
-				callStop(bundle);
 				break;
 			case BundleEvent.INSTALLED:
 			
