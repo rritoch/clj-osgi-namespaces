@@ -455,6 +455,7 @@ public class DeligatingNamespaceRegistry extends ConcurrentHashMap<Symbol, Names
 				}
 				
 				register(cl,exports,imports);
+				
 				logger.info(String.format("Clojure bundle %s has been registered",bundle.getSymbolicName()));
 			}
 		} else {
@@ -526,6 +527,9 @@ public class DeligatingNamespaceRegistry extends ConcurrentHashMap<Symbol, Names
 					withVoidNamespaceClassLoader(bcl,new Runnable() {
 						@Override
 						public void run() {
+							IFn require = Clojure.var("clojure.core","require");
+							require.invoke(Clojure.read(clojure_activator_namespace));
+							
 							IFn func = Clojure.var(clojure_activator_namespace, "start");
 							func.invoke(bnd.getBundleContext());
 						}
